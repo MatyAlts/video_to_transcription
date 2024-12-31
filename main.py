@@ -1,44 +1,25 @@
 import os
+import webbrowser  # Importar la biblioteca para abrir URLs
 from dotenv import load_dotenv
 from moviepy import VideoFileClip
+import gradio as gr
 import google.generativeai as genai
 
 LANGUAGE = "spanish"
 
 load_dotenv()
 
-videos_folder = "videos"
 output_folder = "output"
 
 # Create output folder if it doesn't exist
 os.makedirs(output_folder, exist_ok=True)
-
-# Process each video in the videos folder
-for file_name in os.listdir(videos_folder):
-    if file_name.endswith((".mp4", ".mkv", ".avi", ".mov")):
-        video_path = os.path.join(videos_folder, file_name)
-        output_path = os.path.join(output_folder, os.path.splitext(file_name)[0] + ".mp3")
         
-        print(f"Processing: {file_name}")
-        
-        try:
-            # Load video file and extract audio
-            video = VideoFileClip(video_path)
-            video.audio.write_audiofile(output_path)
-            video.close()
-            print(f"Saved MP3: {output_path}")
-        except Exception as e:
-            print(f"Error processing {file_name}: {e}")
-            
 GEMINI_KEY = os.getenv("API_KEY")
 
 genai.configure(api_key=GEMINI_KEY)
 
 def upload_to_gemini(path, mime_type=None):
-  """Uploads the given file to Gemini.
-
-  See https://ai.google.dev/gemini-api/docs/prompting_with_media
-  """
+  #Uploads the given file to Gemini.
   file = genai.upload_file(path, mime_type=mime_type)
   print(f"Uploaded file '{file.display_name}' as: {file.uri}")
   return file
@@ -55,46 +36,41 @@ generation_config = {
 model = genai.GenerativeModel(
   model_name="gemini-2.0-flash-exp",
   generation_config=generation_config,
-  system_instruction="make a transcription with the audio to text, in spanish, make sure the transcription is time stamped, the text must be ordered and well structured with punctuations",
+  system_instruction=f"make a transcription with the audio to text, in {LANGUAGE}, make sure the transcription is time stamped, the text must be ordered and well structured with punctuations",
 )
 
-# TODO Make these files available on the local file system
-# You may need to update the file paths
+def process_video(video_file):
+  output_path = os.path.join(output_folder, "audio.mp3")
+  
+  try:
+    # Load video file and extract audio
+    video = VideoFileClip(video_file.name)
+    video.audio.write_audiofile(output_path)
+    video.close()
+    print(f"Saved MP3: {output_path}")
+    
+    # Upload to Gemini and generate content
+    uploaded_file = upload_to_gemini(output_path, mime_type="audio/mp3")
+    response = model.generate_content([uploaded_file, f"transcribe in {LANGUAGE}"])
+    
+    # Save response to summary.txt
+    with open("summary.txt", "w", encoding="utf-8") as f:
+      f.write(response.text)
+    
+    return response.text
+  except Exception as e:
+    return f"Error processing video: {e}"
 
-while True:
-  filename = input("Enter the filename to be transcribed: ") + ".mp3"
-  if os.path.exists(os.path.join(output_folder, filename)):
-    break
-  else:
-    print(f"The file {filename} doesn't exists in the folder 'videos'. Please try again.")
-
-files = [
-  upload_to_gemini(f"output/{filename}", mime_type="audio/mp3"),
-]
-
-chat_session = model.start_chat(
-  history=[
-    {
-      "role": "user",
-      "parts": [
-        files[0],
-      ],
-    },
-    {
-      "role": "model",
-      "parts": [
-        "This is a test \n",
-      ],
-    },
-  ]
+# Create Gradio interface
+iface = gr.Interface(
+  fn=process_video,
+  inputs=gr.File(label="Upload MP4 Video", type="filepath", file_count="single", file_types=[".mp4", ".mkv", ".avi", ".mov"]),
+  outputs="text",
+  title="Video to Audio Transcription",
+  allow_flagging='never',
+  description="Upload a video file to transcribe its audio content."
 )
 
-response = model.generate_content([files[0], f"transcribe in {LANGUAGE}"])
-
-# Save response to resumen.txt
-with open("summary.txt", "w", encoding="utf-8") as f:
-  f.write(response.text)
-
-print(response.text)
-
-exit()
+# Launch the interface
+webbrowser.open("http://127.0.0.1:7860")  # Abre la URL en el navegador
+iface.launch()  # Guarda la URL al lanzar la interfaz
