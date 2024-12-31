@@ -1,5 +1,5 @@
 import os
-import webbrowser  # Importar la biblioteca para abrir URLs
+import webbrowser
 from dotenv import load_dotenv
 from moviepy import VideoFileClip
 import gradio as gr
@@ -72,5 +72,5 @@ iface = gr.Interface(
 )
 
 # Launch the interface
-webbrowser.open("http://127.0.0.1:7860")  # Abre la URL en el navegador
-iface.launch()  # Guarda la URL al lanzar la interfaz
+webbrowser.open("http://127.0.0.1:7860")
+iface.launch()
